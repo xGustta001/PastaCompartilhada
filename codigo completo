@@ -1,0 +1,191 @@
+import os
+from flask import Flask, send_from_directory, render_template_string
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import socket
+import threading
+from tkinter import ttk
+
+# Configuração do servidor Flask
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = None  # Pasta será definida após seleção
+
+# Função para verificar se a pasta existe
+def check_folder(folder):
+    return os.path.exists(folder)
+
+# Função recursiva para gerar links de arquivos e pastas
+def generate_folder_html(folder, current_path=''):
+    files_and_folders = os.listdir(folder)  # Lista arquivos e pastas
+    files_html = ''
+    for item in files_and_folders:
+        item_path = os.path.join(folder, item)
+        if os.path.isdir(item_path):  # Se for uma pasta
+            files_html += f'<li><a href="/browse/{current_path}/{item}">{item}/</a></li>'
+        else:  # Se for um arquivo
+            files_html += f'<li><a href="/download/{current_path}/{item}">{item}</a></li>'
+    return files_html
+
+# Rota para exibir o conteúdo de uma pasta
+@app.route('/')
+def index():
+    folder = app.config['UPLOAD_FOLDER']
+    if not check_folder(folder):
+        return '''
+            <html>
+                <head><title>Erro</title></head>
+                <body>
+                    <h1>Pasta não configurada!</h1>
+                    <p>Por favor, selecione uma pasta para hospedar.</p>
+                </body>
+            </html>
+        '''
+    
+    # Gerar conteúdo da pasta inicial
+    files_html = generate_folder_html(folder)
+    html_content = f'''
+    <html>
+        <head>
+            <title>Pasta Compartilhada</title>
+            <style>
+                body {{ font-family: 'Arial', sans-serif; background-color: #F0F2F5; color: #333; margin: 0; padding: 0; }}
+                h1, h2 {{ color: #4CAF50; }}
+                h1 {{ font-size: 2.5em; }}
+                ul {{ list-style-type: none; padding-left: 0; margin: 0; }}
+                li {{ margin: 15px 0; }}
+                a {{ text-decoration: none; color: #1E90FF; font-size: 1.2em; }}
+                a:hover {{ color: #FF6347; }}
+                .container {{ width: 80%; margin: 0 auto; padding: 30px; }}
+                .nav-button {{ margin-top: 20px; background-color: #4CAF50; color: white; padding: 12px 25px; border: none; cursor: pointer; font-size: 1.1em; border-radius: 5px; }}
+                .nav-button:hover {{ background-color: #45a049; }}
+                .footer {{ margin-top: 40px; font-size: 14px; text-align: center; color: #888; }}
+                .footer a {{ text-decoration: none; color: #4CAF50; font-weight: bold; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Pasta Compartilhada</h1>
+                <h2>Conteúdo:</h2>
+                <ul>{files_html}</ul>
+                <a href="/" class="nav-button">Voltar</a>
+            </div>
+            <div class="footer">
+                Desenvolvido por: <a href="https://github.com/xGustta001" target="_blank">xGustta001</a>
+            </div>
+        </body>
+    </html>
+    '''
+    return render_template_string(html_content)
+
+# Rota para exibir o conteúdo de uma subpasta
+@app.route('/browse/<path:subfolder>')
+def browse_folder(subfolder):
+    folder = app.config['UPLOAD_FOLDER']
+    target_folder = os.path.join(folder, subfolder)
+
+    if not check_folder(target_folder):
+        return f"Pasta {subfolder} não encontrada. Verifique o caminho da pasta."
+
+    files_html = generate_folder_html(target_folder, subfolder)
+    html_content = f'''
+    <html>
+        <head>
+            <title>Pasta {subfolder}</title>
+            <style>
+                body {{ font-family: 'Arial', sans-serif; background-color: #F0F2F5; color: #333; margin: 0; padding: 0; }}
+                h1, h2 {{ color: #4CAF50; }}
+                h1 {{ font-size: 2.5em; }}
+                ul {{ list-style-type: none; padding-left: 0; margin: 0; }}
+                li {{ margin: 15px 0; }}
+                a {{ text-decoration: none; color: #1E90FF; font-size: 1.2em; }}
+                a:hover {{ color: #FF6347; }}
+                .container {{ width: 80%; margin: 0 auto; padding: 30px; }}
+                .nav-button {{ margin-top: 20px; background-color: #4CAF50; color: white; padding: 12px 25px; border: none; cursor: pointer; font-size: 1.1em; border-radius: 5px; }}
+                .nav-button:hover {{ background-color: #45a049; }}
+                .footer {{ margin-top: 40px; font-size: 14px; text-align: center; color: #888; }}
+                .footer a {{ text-decoration: none; color: #4CAF50; font-weight: bold; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Pasta: {subfolder}</h1>
+                <h2>Conteúdo:</h2>
+                <ul>{files_html}</ul>
+                <a href="/" class="nav-button">Voltar</a>
+            </div>
+            <div class="footer">
+                Desenvolvido por: <a href="https://github.com/xGustta001" target="_blank">xGustta001</a>
+            </div>
+        </body>
+    </html>
+    '''
+    return render_template_string(html_content)
+
+# Rota para download de arquivos
+@app.route('/download/<path:filename>')
+def download_file(filename):
+    folder = app.config['UPLOAD_FOLDER']
+    return send_from_directory(folder, filename)
+
+# Função para rodar o servidor Flask em uma thread separada
+def run_server():
+    folder = app.config['UPLOAD_FOLDER']
+    if not check_folder(folder):
+        messagebox.showerror("Erro", "A pasta selecionada não foi encontrada.")
+        return
+
+    # Obtém o IP local do servidor
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+
+    # Exibe uma mensagem para o usuário com o IP local
+    messagebox.showinfo("Servidor Iniciado", f"O servidor está rodando em: http://{local_ip}:5000")
+
+    # Inicia o servidor Flask com o host configurado para rede local
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)  # Desativa o reloader
+
+# Função para inicializar a interface gráfica
+def start_gui():
+    root = tk.Tk()
+    root.title("Hospedador de Pasta")
+
+    # Estilo
+    style = ttk.Style()
+    style.configure('TButton', font=('Arial', 12), width=20, padding=10)
+    style.configure('TLabel', font=('Arial', 12), anchor='center')
+    style.configure('TFrame', background='#f7f7f7')
+
+    # Container
+    container = ttk.Frame(root, padding="30")
+    container.pack(padx=10, pady=10, expand=True, fill='both')
+
+    # Título
+    status_label = ttk.Label(container, text="Escolha a pasta que deseja hospedar", wraplength=400)
+    status_label.grid(row=0, column=0, pady=20)
+
+    # Função para selecionar a pasta
+    def select_folder():
+        folder_selected = filedialog.askdirectory()  # Abre o seletor de pastas
+        if folder_selected:
+            app.config['UPLOAD_FOLDER'] = folder_selected  # Define a pasta a ser compartilhada
+            status_label.config(text=f"Pasta selecionada: {folder_selected}")
+            start_server_button.config(state=tk.NORMAL)  # Ativa o botão de iniciar servidor
+
+    # Botão para selecionar a pasta
+    select_folder_button = ttk.Button(container, text="Selecionar Pasta", command=select_folder)
+    select_folder_button.grid(row=1, column=0, pady=10)
+
+    # Função para iniciar o servidor
+    def start_server():
+        threading.Thread(target=run_server, daemon=True).start()  # Inicia o servidor em uma thread separada
+
+    # Botão para iniciar o servidor
+    start_server_button = ttk.Button(container, text="Iniciar Servidor", state=tk.DISABLED, command=start_server)
+    start_server_button.grid(row=2, column=0, pady=10)
+
+    # Rodando a interface gráfica
+    root.mainloop()
+
+# Rodar a interface gráfica
+if __name__ == '__main__':
+    start_gui()
